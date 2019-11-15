@@ -40,6 +40,14 @@ def get_image(path, size=20):
     return convert_image(img)
 
 
+def invert_image(path):
+    img = Image.open(path)
+    img = img.convert("L")
+    img = img.resize((20, 20))
+    img = np.asarray(img)
+    return ~img
+
+
 def convert_image(img):
     image = np.asarray(img)
     if(not np.amin(image) == 255):
@@ -55,16 +63,13 @@ def get_hog(img):
         5, 5), cells_per_block=(3, 3))
     return exposure.rescale_intensity(hog_image, in_range=(0, 0.9))
 
-
-def invert_image(image):
-    return ~image
-
-
 def load_data():
     images = []
     dataset_path = "./dataset/chars74k-lite/"
     for char in os.listdir(dataset_path):
         images_on_char = [{'image': get_image(dataset_path + char + "/" + path), 'label': char} for path in os.listdir(
+            dataset_path + char)]
+        images_on_char += [{'image': convert_image(invert_image(dataset_path + char + "/" + path)), 'label': char} for path in os.listdir(
             dataset_path + char)]
 
         images += images_on_char
@@ -72,8 +77,8 @@ def load_data():
 
 
 def check_white(window):
-    return np.amax(window) == 255
-    
+    count = np.count_nonzero(window == 255)
+    return 1 - count/400
 
 
 def euclidean_distance(x1, x2):
@@ -94,43 +99,39 @@ def sliding_window(path, model):
     tmp = image
     # for drawing a rectangle
     image = np.asarray(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
-    stepSize = 20
+    stepSize = 15
     (w_width, w_height) = (20, 20)  # window size
     image_xy = []
     for x in range(0, image.shape[0] - w_width, stepSize):
         for y in range(0, image.shape[1] - w_height, stepSize):
             window = image[x:x + w_width, y:y + w_height]
-            best_prediction = 0
-            initial_threshold = threshold = 0.3
+            best_prediction = [[0]]
+            best_white = 0
             label = ""
-            if(check_white(window)):
-                prediction = model.predict_proba(
-                    np.array(convert_image(window)).reshape(1, -1))
-            else:
-                prediction = 0 
-            if(np.amax(prediction) >= 0.2):
-                positions = [i for i in range(-30, 30, 5)]
-                initial_threshold = 0.9
+            white_score = check_white(window)
+            if(white_score >= 0.3):
+                positions = [i for i in range(-20, 20, 5)]
                 for i in positions:
                     for j in positions:
 
                         window = image[x+j: x + j +
                                        w_width, y+i:y + i + w_height]
-                        if(window.shape == (w_width, w_height)):
-                            prediction = model.predict_proba(
-                                np.array(convert_image(window)).reshape(1, -1))
-                        if(np.amax(prediction) > best_prediction):
-                            best_prediction = np.amax(prediction)
-                            label = model.classes_[
-                                np.where(prediction[0] == best_prediction)]
-                            if(label == "i"):
-                                threshold = 1
-                            else:
-                                threshold = initial_threshold
+                        if(check_white(window) > best_white):
+                            best_white = check_white(window)
+                            if(window.shape == (20, 20)):
+                                best_prediction = model.predict_proba(
+                                    np.array(convert_image(window)).reshape(1, -1))
                             best_x, best_y = x+j, y+i
 
-            if(best_prediction > threshold):
-                print(label)
+                # label = model.classes_[
+                index = np.argmax(best_prediction)
+                label = model.classes_[index]
+                # print(label)
+                cv2.putText(tmp, label,
+                            (best_y+10, best_x - 20),
+                            fontFace=cv2.FONT_HERSHEY_PLAIN,
+                            fontScale=1,
+                            color=(255, 0, 0))
                 image_xy.append((best_x, best_y))
                 cv2.rectangle(tmp, (best_y, best_x), (best_y + w_height, best_x + w_width),
                               (255, 0, 0), 2)  # draw rectangle on image
@@ -149,10 +150,10 @@ def KNN():
         images = load_data()
         y = [image["label"]for image in images]
         x = [image["image"] for image in images]
-        inverted_x = [invert_image(image["image"])
-                      for image in images]
-        y += y
-        x += inverted_x
+        # inverted_x = [invert_image(image["image"])
+        #              for image in images]
+        #y += y
+        #x += inverted_x
         X_train, X_test, Y_train, Y_test = train_test_split(x, y)
         model = KNeighborsClassifier(8)
         model.fit(X_train, Y_train)
@@ -160,8 +161,7 @@ def KNN():
         print(classification_report(Y_test, Y_pred))
         with open('knn.pkl', 'wb') as picklefile:
             pickle.dump(model, picklefile)
-    print("halla")
-    sliding_window("./dataset/detection-images/detection-1.jpg", model)
+    sliding_window("./dataset/detection-images/detection-2.jpg", model)
 
 
 def SVM():
