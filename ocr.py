@@ -1,4 +1,5 @@
 import os
+import string
 from PIL import Image
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -112,7 +113,7 @@ def KNN():
         print(classification_report(Y_test, Y_pred))
         with open('knn.pkl', 'wb') as picklefile:
             pickle.dump(model, picklefile)
-    sliding_window("./dataset/detection-images/detection-2.jpg", model)
+    sliding_window("./dataset/detection-images/detection-1.jpg", model)
 
 
 def SVM():
@@ -128,14 +129,29 @@ def SVM():
         x = [image["image"] for image in images]  # create image array
         X_train, X_test, Y_train, Y_test = train_test_split(
             x, y)  # split into training data and test data
-        model = SVC(gamma="scale")
+        model = SVC(gamma="scale", probability=True)
         model.fit(X_train, Y_train)
         Y_pred = model.predict(X_test)
         print(classification_report(Y_test, Y_pred))
         with open('SVM.pkl', 'wb') as picklefile:
             pickle.dump(model, picklefile)
-    sliding_window("./dataset/detection-images/detection-2.jpg",
-                   model)  # run the classifier
+    sliding_window("./dataset/detection-images/detection-2.jpg", model)  # run the classifier
 
 
-SVM()
+# Used only for generating the predictions for the report
+def predict(model):
+    url = "./dataset/chars74k-lite/e/e_147.jpg"
+    probs = model.predict_proba(np.array(get_image(url)).reshape(1, -1))
+    prediction = model.predict(np.array(get_image(url)).reshape(1, -1))
+    print_probs(probs, prediction)
+
+
+def print_probs(probs, prediction):
+    print("Prediction: " + prediction[0])
+    alpha = string.ascii_letters
+    for i in range(len(probs[0])):
+        print(alpha[i], probs[0][i])
+
+
+KNN()
+# SVM()
